@@ -72,7 +72,7 @@ def half_division(f: callable, a: float, b: float, e: float, minimum: bool=True)
     return xk, f(xk), k
 
 
-def fastest_gradient_method(a: float, b: float, c: float, x: tuple[float, float], e1: float, e2: float, M: int, t: Any=None) -> tuple[tuple[float, float], float, int]:
+def fastest_gradient_method(a: float, b: float, c: float, x: tuple[float, float], e1: float, e2: float, M: int, minimum: bool=True) -> tuple[tuple[float, float], float, int]:
     f = tipical_function_maker(a, b, c)
     df = derivative_maker(a, b, c)
     k = 0
@@ -80,14 +80,25 @@ def fastest_gradient_method(a: float, b: float, c: float, x: tuple[float, float]
     while k < M:
         if norma(df(*x)) < e1:
             break
+        if minimum:
+            def fi(t: float) -> float:
+                x1 = x[0] - t*df(*x)[0]
+                x2 = x[1] - t*df(*x)[1]
+                return f(x1, x2)
+        else:
+            def fi(t: float) -> float:
+                x1 = x[0] + t*df(*x)[0]
+                x2 = x[1] + t*df(*x)[1]
+                return f(x1, x2)
+        if minimum:
+            tk = half_division(fi, -1, 1, 0.001)[0]
+        else:
+            tk = half_division(fi, -1, 1, 0.001, False)[0]
 
-        def fi(t: float) -> float:
-            x1 = x[0] - t*df(*x)[0]
-            x2 = x[1] - t*df(*x)[1]
-            return f(x1, x2)
-
-        tk = half_division(fi, -1, 1, 0.001)[0]
-        new_x = x[0] - tk*df(*x)[0], x[1] - tk*df(*x)[1]
+        if minimum:
+            new_x = (x[0] - tk*df(*x)[0], x[1] - tk*df(*x)[1])
+        else:
+            new_x = (x[0] + tk*df(*x)[0], x[1] + tk*df(*x)[1])
         if norma((new_x[0] - x[0], new_x[1] - x[1])) < e2 and abs(f(*new_x) - f(*x)) < e2:
             if fl:
                 x = new_x
@@ -101,7 +112,7 @@ def fastest_gradient_method(a: float, b: float, c: float, x: tuple[float, float]
     return x, f(*x), k+1
 
 
-def gradient_method(a: float, b: float, c: float, x: tuple[float, float], e1: float, e2: float, M: int, t: float) -> tuple[tuple[float, float], float, int]:
+def gradient_method(a: float, b: float, c: float, x: tuple[float, float], e1: float, e2: float, M: int, t: float, minimum: bool=True) -> tuple[tuple[float, float], float, int]:
     f = tipical_function_maker(a, b, c)
     df = derivative_maker(a, b, c)
     k = 0
@@ -111,10 +122,18 @@ def gradient_method(a: float, b: float, c: float, x: tuple[float, float], e1: fl
             break
         if k >= M:
             break
-        new_x = x[0] - t * df(*x)[0], x[1] - t * df(*x)[1]
-        while f(*new_x) - f(*x) >= 0:
+        # new_x = x[0] - t * df(*x)[0], x[1] - t * df(*x)[1]
+        if minimum:
+            new_x = (x[0] - t*df(*x)[0], x[1] - t*df(*x)[1])
+        else:
+            new_x = (x[0] + t*df(*x)[0], x[1] + t*df(*x)[1])
+        while (f(*new_x) - f(*x) >= 0 and minimum) or (f(*new_x) - f(*x) <= 0 and not minimum):
             t /= 2
-            new_x = x[0] - t * df(*x)[0], x[1] - t * df(*x)[1]
+            # new_x = x[0] - t * df(*x)[0], x[1] - t * df(*x)[1]
+            if minimum:
+                new_x = (x[0] - t * df(*x)[0], x[1] - t * df(*x)[1])
+            else:
+                new_x = (x[0] + t * df(*x)[0], x[1] + t * df(*x)[1])
         if norma((new_x[0] - x[0], new_x[1] - x[1])) < e2 and abs(f(*new_x) - f(*x)) < e2:
             if fl:
                 x = new_x
@@ -158,19 +177,17 @@ class Win(QWidget, Ui_Window):
             if not self.e2_str.text().strip():
                 raise Exception('Необходимо задать допустимую погрешность e2')
             if self.t_str.isVisible() and not self.t_str.text().strip():
-                raise Exception('Необхоидмо задать шаг t')
+                raise Exception('Необходимо задать шаг t')
             if self.t_str.isVisible() and float(self.t_str.text()) == 0:
                 raise Exception('Шаг не должен быть равен 0')
             e1 = float(self.e1_str.text())
             e2 = float(self.e2_str.text())
             if e1 == 0 or e2 == 0:
                 raise Exception('Погрешность не может быть равна нулю')
-            # minimum = self.minimum_box.currentText() == 'Минимум'
             if self.method_box.currentText() == 'Метод градиентного спуска':
-                method = gradient_method
+                x, fx, k = gradient_method(float(self.a_str.text()), float(self.b_str.text()), float(self.c_str.text()), tuple(map(float, self.x_str.text().split())), e1, e2, int(self.M_value.value()), float(self.t_str.text()), self.minimum.isChecked())
             else:
-                method = fastest_gradient_method
-            x, fx, k = method(float(self.a_str.text()), float(self.b_str.text()), float(self.c_str.text()), tuple(map(float, self.x_str.text().split())), e1, e2, int(self.M_value.value()), float(self.t_str.text()))
+                x, fx, k = fastest_gradient_method(float(self.a_str.text()), float(self.b_str.text()), float(self.c_str.text()), tuple(map(float, self.x_str.text().split())), e1, e2, int(self.M_value.value()), self.minimum.isChecked())
             self.output.setText(f'x* = {x}\nf(x*) = {fx}\nЧисло итераций: {k}')
         except Exception as ex:
             self.output.setText(str(ex))
